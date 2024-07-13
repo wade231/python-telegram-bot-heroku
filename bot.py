@@ -1,64 +1,67 @@
-import logging
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
-import os
-PORT = int(os.environ.get('PORT', '8443'))
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+import pymongo
 
-# Enable logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
 
-logger = logging.getLogger(__name__)
-TOKEN = 'YOURTELEGRAMBOTTOKEN'
 
-# Define a few command handlers. These usually take the two arguments update and
-# context. Error handlers also receive the raised TelegramError object in error.
-def start(update, context):
-    """Send a message when the command /start is issued."""
-    update.message.reply_text('Hi!')
+# Define your bot token
+bot_token = '6479457005:AAFHxurm8wONJj9XpBLz6259YAkGfiU22hg'
 
-def help(update, context):
-    """Send a message when the command /help is issued."""
-    update.message.reply_text('Help!')
+# MongoDB connection string
+mongo_uri = 'mongodb+srv://wade2001:wade2001@cluster0.wkjofrl.mongodb.net/?retryWrites=true&w=majority'
 
-def echo(update, context):
-    """Echo the user message."""
-    update.message.reply_text(update.message.text)
+# Create a MongoDB client and connect to your database
+client = pymongo.MongoClient(mongo_uri)
+db = client['Cluster0']  # Replace with your database name
+collection = db['Telegram_files']  # Replace with your collection name
 
-def error(update, context):
-    """Log Errors caused by Updates."""
-    logger.warning('Update "%s" caused error "%s"', update, context.error)
+# Replace 'SPECIFIC_GROUP_CHAT_ID' with the chat_id of the specific group
+SPECIFIC_GROUP_CHAT_ID = -1001232369957  # Replace with the actual chat_id
+
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text("Bot is running!")
+
+def handle_message(update: Update, context: CallbackContext):
+    if update.message and update.message.chat_id == SPECIFIC_GROUP_CHAT_ID:
+        text = update.message.text.lower()
+        words = text.split()
+        reply_count = 0
+        keyboard = []
+
+        # Query your MongoDB collection for file data
+        cursor = collection.find()
+        for document in cursor:
+            filename = document['file_name']
+            file_id = document['_id']
+
+            # Generate a unique start parameter (for example, using the file_id)
+            start_parameter = str(file_id)
+
+            url = f"https://t.me/pusthakalasahayaka_bot?start={start_parameter}"
+
+            # Your keyword filtering logic
+            file_words = filename.split()
+            ignore_words = ["pdf", "book", "පොත", "poth", "පොත්", "potha"]
+            file_words = [x.lower() for x in file_words if x.lower() not in ignore_words]
+            for word in file_words:
+                if word in words:
+                    if reply_count < 30:
+                        keyboard.append([InlineKeyboardButton(filename, url=url)])
+                        reply_count += 1
+                    else:
+                        break
+        if keyboard:
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            update.message.reply_text("Download කරන්න යට බට්න් එක ඔබන්න 👇:", reply_markup=reply_markup)
 
 def main():
-    """Start the bot."""
-    # Create the Updater and pass it your bot's token.
-    # Make sure to set use_context=True to use the new context based callbacks
-    # Post version 12 this will no longer be necessary
-    updater = Updater(TOKEN, use_context=True)
-
-    # Get the dispatcher to register handlers
+    updater = Updater(bot_token, use_context=True)
     dp = updater.dispatcher
 
-    # on different commands - answer in Telegram
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("help", help))
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
 
-    # on noncommand i.e message - echo the message on Telegram
-    dp.add_handler(MessageHandler(Filters.text, echo))
-
-    # log all errors
-    dp.add_error_handler(error)
-
-    # Start the Bot
-    updater.start_webhook(
-        listen="0.0.0.0",
-        port=int(PORT),
-        url_path=TOKEN,
-        webhook_url='https://yourherokuappname.herokuapp.com/' + TOKEN
-    )
-
-    # Run the bot until you press Ctrl-C or the process receives SIGINT,
-    # SIGTERM or SIGABRT. This should be used most of the time, since
-    # start_polling() is non-blocking and will stop the bot gracefully.
+    updater.start_polling()
     updater.idle()
 
 if __name__ == '__main__':
